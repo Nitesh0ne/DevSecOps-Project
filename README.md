@@ -91,6 +91,10 @@ docker build --build-arg TMDB_V3_API_KEY=<your-api-key> -t netflix .
         ```
         docker run -d --name sonar -p 9000:9000 sonarqube:lts-community
         ```
+      - run sonaqube on docker container official documentation
+        ```
+         docker run -d --name sonarqube -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true -p 9000:9000 sonarqube:latest
+         ```
         
         
         To access: 
