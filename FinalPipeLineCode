@@ -1,0 +1,99 @@
+pipeline {
+    agent {
+        label 'worker'  
+    }
+    tools {
+    jdk 'jdk17'
+    nodejs 'node16'
+}
+environment {
+    SCANNER_HOME = tool 'sonar-scanner'
+}
+stages {
+    stage('clean workspace') {
+        steps {
+            cleanWs()
+        }
+    }
+    stage('Checkout from Git') {
+        steps {
+            git branch: 'main', url: 'https://github.com/Nitesh0ne/DevSecOps-Project.git'
+        }
+    }
+    stage("Sonarqube Analysis") {
+        steps {
+            withSonarQubeEnv('sonar-server') {
+                sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Netflix \\
+                -Dsonar.projectKey=Netflix'''
+            }
+        }
+    }
+    stage("quality gate") {
+        steps {
+            script {
+                timeout(time: 10, unit: 'MINUTES') { // Prevent infinite waiting
+                    def qualityGate = waitForQualityGate abortPipeline: false, credentialsId: 'sonar-project-token'
+                    if (qualityGate.status != 'OK') {
+                    error "Quality Gate Failed: ${qualityGate.status}"
+                    }
+                }
+            }
+        }
+    }
+    stage('OWASP FS SCAN') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+    }
+  
+      stage('TRIVY FS SCAN') {
+            steps {
+                sh "trivy fs . > trivyfs.txt"
+            }
+        }
+       stage("Docker Build & Push"){
+            steps{
+                script{
+                   withDockerRegistry(credentialsId: 'docker_pat', toolName: 'docker'){   
+                       sh "docker build --build-arg TMDB_V3_API_KEY=$API_KEY -t netflix ."
+                       sh "docker tag netflix nitace/netflix:latest "
+                       sh "docker push nitace/netflix:latest "
+                    }
+                }
+            }
+        }
+        stage("TRIVY"){
+            steps{
+                sh "trivy image nitace/netflix:latest > trivyimage.txt" 
+                }
+            }
+}
+
+post { 
+        always { 
+            mail to: 'ntshnepali@gmail.com',
+            subject: "Job '${JOB_NAME}' (${BUILD_NUMBER}) is waiting for input",
+            body: "Please go to ${BUILD_URL} and verify the build"
+        }
+        success {
+            mail bcc: '', body: """Hi Team,
+            Build #$BUILD_NUMBER is successful, please go through the url
+            $BUILD_URL
+            and verify the details.
+
+            Regards,
+            DevOps Team""", cc: '', from: '', replyTo: '', subject: 'BUILD SUCCESS NOTIFICATION', to: 'ntshnepali@gmail.com'
+        }
+        failure {
+            mail bcc: '', body: """Hi Team,
+            Build #$BUILD_NUMBER is unsuccessful, please go through the url
+            $BUILD_URL
+            and verify the details.
+
+            Regards,
+            DevOps Team""", cc: '', from: '', replyTo: '', subject: 'BUILD FAILED NOTIFICATION', to: 'ntshnepali@gmail.com'
+        }
+    }
+    
+}
