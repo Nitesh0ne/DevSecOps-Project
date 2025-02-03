@@ -363,6 +363,86 @@ sudo su
 sudo usermod -aG docker jenkins
 sudo systemctl restart jenkins
 
+```
+## My Final Pipeline
+
+pipeline {
+    agent {
+        label 'worker'  
+    }
+    tools {
+    jdk 'jdk17'
+    nodejs 'node16'
+}
+environment {
+    SCANNER_HOME = tool 'sonar-scanner'
+}
+stages {
+    stage('clean workspace') {
+        steps {
+            cleanWs()
+        }
+    }
+    stage('Checkout from Git') {
+        steps {
+            git branch: 'main', url: 'https://github.com/Nitesh0ne/DevSecOps-Project.git'
+        }
+    }
+    stage("Sonarqube Analysis") {
+        steps {
+            withSonarQubeEnv('sonar-server') {
+                sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Netflix \\
+                -Dsonar.projectKey=Netflix'''
+            }
+        }
+    }
+    stage("quality gate") {
+        steps {
+            script {
+                timeout(time: 10, unit: 'MINUTES') { // Prevent infinite waiting
+                    def qualityGate = waitForQualityGate abortPipeline: false, credentialsId: 'sonar-project-token'
+                    if (qualityGate.status != 'OK') {
+                    error "Quality Gate Failed: ${qualityGate.status}"
+                    }
+                }
+            }
+        }
+    }
+    stage('OWASP FS SCAN') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+    }
+  
+      stage('TRIVY FS SCAN') {
+            steps {
+                sh "trivy fs . > trivyfs.txt"
+            }
+        }
+       stage("Docker Build & Push"){
+            steps{
+                script{
+                   withDockerRegistry(credentialsId: 'docker_pat', toolName: 'docker'){   
+                       sh "docker build --build-arg TMDB_V3_API_KEY=$API_KEY -t netflix ."
+                       sh "docker tag netflix nitace/netflix:latest "
+                       sh "docker push nitace/netflix:latest "
+                    }
+                }
+            }
+        }
+                stage("TRIVY"){
+        steps{
+                sh "trivy image nitace/netflix:latest > trivyimage.txt" 
+            }
+        }
+}
+
+    
+}
+
+```
+
 
 ```
 
