@@ -363,9 +363,8 @@ sudo su
 sudo usermod -aG docker jenkins
 sudo systemctl restart jenkins
 
-```
 ## My Final Pipeline
-
+```
 pipeline {
     agent {
         label 'worker'  
@@ -442,8 +441,6 @@ stages {
 }
 
 ```
-
-
 ```
 
 **Phase 4: Monitoring**
